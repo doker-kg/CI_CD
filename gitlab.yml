@@ -1,0 +1,56 @@
+- hosts: test-deb
+  tasks:
+  - name: delete old file
+    file: path=/tmp/hello.py state=absent
+
+  - name: delete old compile file from /tmp
+    file: path=/tmp/hello.pyc state=absent
+
+  - name: download py file
+    get_url:
+     url: https://raw.githubusercontent.com/doker-kg/CI_CD/main/hello.py
+     dest: /tmp/hello.py
+
+  - name: Check syntax py code
+    command: pychecker /tmp/hello.py
+    register: result
+    ignore_errors: True
+
+  - name: delete broken file
+    file: path=/tmp/hello.py state=absent
+    when: result is failed
+
+  - name: Syntax error. cansel job
+    fail: msg="downloaded code has syntax errors."
+    when: result is failed
+
+  - name: delete compile file from /tmp
+    file: path=/tmp/hello.pyc state=absent
+
+  - name: backup 
+    command: mv -f /usr/lib/cgi-bin/hello.py /usr/lib/cgi-bin/hello.py_back
+
+  - name: Copy files from /tmp to /usr/lib/cgi-bin/
+    copy: remote_src=True src=/tmp/hello.py dest=/usr/lib/cgi-bin/hello.py mode='755'
+
+  - name: delete old file from /tmp
+    file: path=/tmp/hello.py state=absent
+
+  - name: Check that a page returns a status 200 and fail if the word hello is not in the page contents
+    uri:
+     url: http://10.0.3.68/cgi-bin/hello.py
+     return_content: yes
+    register: site_answ
+    failed_when: "'hello' not in site_answ.content"
+    ignore_errors: True
+
+  - name: Rolling back - Removing new code
+    command: mv -f /usr/lib/cgi-bin/hello.py_back /usr/lib/cgi-bin/hello.py
+    when: site_answ is failed
+
+  - name: Rolling back - Ending playbook
+    fail: msg="Site now work whis new code."
+    when: site_answ is failed
+
+  - name: delete old file from /tmp
+    file: path=/usr/lib/cgi-bin/hello.py_back state=absent
